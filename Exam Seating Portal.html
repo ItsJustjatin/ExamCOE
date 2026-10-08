@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Exam Seating Portal</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f6f7fb;--card:#fff;--tx:#1b1f2a;--mu:#6b7385;--ac:#3b5bdb;--bd:#e3e6ef;--ok:#2f9e44}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12141b;--card:#1b1f2a;--tx:#eceef4;--mu:#9aa2b5;--ac:#7b93ff;--bd:#2c3242;--ok:#51cf66}}
+:root[data-theme="dark"]{--bg:#12141b;--card:#1b1f2a;--tx:#eceef4;--mu:#9aa2b5;--ac:#7b93ff;--bd:#2c3242;--ok:#51cf66}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.5}
+main{max-width:860px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:1.5rem;margin:.2em 0}h2{font-size:1.05rem;margin:0 0 10px}
+p.s{color:var(--mu);margin:0 0 18px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:18px;margin-bottom:16px}
+.n{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--ac);color:#fff;font-size:.8rem;margin-right:8px}
+.drop{border:2px dashed var(--bd);border-radius:12px;padding:26px;text-align:center;cursor:pointer;color:var(--mu)}
+.drop:hover{border-color:var(--ac)}
+input[type=text]{width:100%;padding:11px 12px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);font-size:1rem}
+button{background:var(--ac);color:#fff;border:0;border-radius:10px;padding:10px 16px;font-size:.95rem;cursor:pointer}
+button.g{background:transparent;color:var(--ac);border:1px solid var(--ac)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-top:14px}
+.stats div{background:var(--bg);border-radius:10px;padding:10px;text-align:center}
+.stats b{display:block;font-size:1.25rem}.stats span{color:var(--mu);font-size:.8rem}
+.row{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start}
+#qr{background:#fff;padding:12px;border-radius:12px;min-width:100px;min-height:100px}
+iframe{width:100%;height:440px;border:1px solid var(--bd);border-radius:12px;background:#fff}
+.hid{display:none}.msg{color:var(--mu);font-size:.9rem;margin-top:8px}
+</style>
+</head>
+<body>
+<main>
+<h1>Exam Seating Portal</h1>
+<p class="s">Upload the day's Excel &rarr; get a QR code &rarr; students scan and see their exam details.</p>
+
+<div class="card">
+<h2><span class="n">1</span>Upload today's Excel</h2>
+<label class="drop" id="drop">Click to choose the <b>Room_summary_Details</b> file (.xls / .xlsx)
+<input type="file" id="file" accept=".xls,.xlsx" class="hid"></label>
+<div id="info" class="hid">
+<div class="stats" id="stats"></div>
+</div>
+<div class="msg" id="err"></div>
+</div>
+
+<div id="after" class="hid">
+<div class="card">
+<h2><span class="n">2</span>Download the student page</h2>
+<p class="msg" style="margin-top:0">One self-contained file holding every student's details for this date. Upload it to your school website / hosting.</p>
+<button id="dlPage">Download student page (.html)</button>
+</div>
+
+<div class="card">
+<h2><span class="n">3</span>Create the day's QR code</h2>
+<p class="msg" style="margin-top:0">Paste the public link where you hosted the file from step 2.</p>
+<input type="text" id="url" placeholder="https://your-school.edu/exams/exam-2026-10-08.html">
+<div class="row" style="margin-top:14px">
+<div id="qr"></div>
+<div><div id="qrTxt" class="msg">Enter the link to generate the QR.</div>
+<button class="g hid" id="dlQr" style="margin-top:10px">Download QR (.png)</button></div>
+</div>
+</div>
+
+<div class="card">
+<h2><span class="n">4</span>Preview what students see</h2>
+<iframe id="prev" title="Student page preview"></iframe>
+</div>
+</div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+let DAY=null, PAGE='';
+const mins=s=>{const m=/(\d+):(\d+)\s*(AM|PM)/i.exec(s||'');if(!m)return 0;let h=+m[1]%12;if(/PM/i.test(m[3]))h+=12;return h*60+ +m[2]};
+
+function studentPage(d){
+ const data=JSON.stringify(d).replace(/</g,'\\u003c');
+ const css=':root{--bg:#f6f7fb;--c:#fff;--t:#1b1f2a;--m:#6b7385;--a:#3b5bdb;--b:#e3e6ef}@media(prefers-color-scheme:dark){:root{--bg:#12141b;--c:#1b1f2a;--t:#eceef4;--m:#9aa2b5;--a:#7b93ff;--b:#2c3242}}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font-family:system-ui,sans-serif}main{max-width:520px;margin:0 auto;padding:22px 16px}h1{font-size:1.3rem;margin:0}p{color:var(--m)}input{width:100%;padding:13px;border:1px solid var(--b);border-radius:10px;font-size:1.05rem;background:var(--c);color:var(--t);text-transform:uppercase}button{width:100%;margin-top:10px;padding:13px;border:0;border-radius:10px;background:var(--a);color:#fff;font-size:1rem}.c{background:var(--c);border:1px solid var(--b);border-radius:14px;padding:16px;margin-top:14px}.r{font-size:2rem;font-weight:700;color:var(--a)}.k{color:var(--m);font-size:.8rem;text-transform:uppercase;letter-spacing:.04em}.e{color:#e03131;margin-top:14px}';
+ const js='const D='+data+';const $=i=>document.getElementById(i);function go(){const q=$("q").value.trim().toUpperCase().replace(/\\s+/g,"");const o=$("o");const s=D.r[q];if(!s){o.innerHTML=q?"<div class=e>No exam found for "+q.replace(/[<>&]/g,"")+" on this date. Check your roll number.</div>":"";return}const h=s[1].map(e=>"<div class=c><div class=k>"+e[0]+"</div><div style=\\"font-weight:600;margin:4px 0\\">"+esc(e[2])+"</div><div class=k>"+esc(e[1])+"</div><div class=k style=\\"margin-top:10px\\">Room</div><div class=r>"+esc(e[3])+"</div></div>").join("");o.innerHTML="<div class=c><div class=k>Student</div><div style=\\"font-size:1.15rem;font-weight:600\\">"+esc(s[0])+"</div><div class=k>"+q+"</div></div>"+h}function esc(x){return String(x).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[c]))}$("q").addEventListener("keydown",e=>{if(e.key==="Enter")go()});$("b").onclick=go;';
+ return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Exam Details - '+d.date+'</title><style>'+css+'</style></head><body><main><h1>Exam Details</h1><p>Exam date: <b>'+d.date+'</b>. Enter your roll number.</p><input id="q" placeholder="e.g. 20261BAV0001" autocomplete="off"><button id="b">Show my exam details</button><div id="o"></div></main><script>'+js+'<\/script></body></html>';
+}
+
+async function load(f){
+ $('err').textContent='';
+ try{
+  const wb=XLSX.read(await f.arrayBuffer(),{type:'array',cellDates:false});
+  const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{raw:false,defval:''});
+  const need=['Date','Session','Qpcode','Subname','Room Name','Roll Number','Student Name'];
+  if(!rows.length||need.some(k=>!(k in rows[0])))throw new Error('Columns not recognised. Expected: '+need.join(', '));
+  const r={},rooms=new Set(),subs=new Set(),dates=new Set();
+  for(const x of rows){
+   const roll=String(x['Roll Number']).trim().toUpperCase();if(!roll)continue;
+   dates.add(String(x['Date']).trim());rooms.add(x['Room Name']);subs.add(x['Qpcode']);
+   (r[roll]=r[roll]||[String(x['Student Name']).trim(),[]])[1].push([String(x['Session']).trim(),String(x['Qpcode']).trim(),String(x['Subname']).trim(),String(x['Room Name']).trim()]);
+  }
+  Object.values(r).forEach(s=>s[1].sort((a,b)=>mins(a[0])-mins(b[0])));
+  const date=[...dates].join(' / ');
+  DAY={date,r};PAGE=studentPage(DAY);
+  $('stats').innerHTML=[[date,'Exam date'],[Object.keys(r).length,'Students'],[rooms.size,'Rooms'],[subs.size,'Subjects'],[rows.length,'Seat entries']].map(a=>'<div><b>'+a[0]+'</b><span>'+a[1]+'</span></div>').join('');
+  $('info').classList.remove('hid');$('after').classList.remove('hid');
+  $('prev').srcdoc=PAGE;
+ }catch(e){$('err').textContent='Could not read file: '+e.message}
+}
+$('file').onchange=e=>e.target.files[0]&&load(e.target.files[0]);
+
+async function save(filename,data){
+ try{const d=await claude.use('downloads');if(!d){$('err').textContent='Downloads are not available in this view.';return}await d.save({filename,data})}
+ catch(e){if(e&&e.code!=='declined')$('err').textContent='Download failed: '+(e.message||e.code)}
+}
+$('dlPage').onclick=()=>DAY&&save('exam-'+DAY.date+'.html',PAGE);
+
+function qr(){
+ const u=$('url').value.trim(),box=$('qr');box.innerHTML='';
+ if(!/^https?:\/\//i.test(u)){$('qrTxt').textContent='Enter the link (starting with https://) to generate the QR.';$('dlQr').classList.add('hid');return}
+ new QRCode(box,{text:u,width:220,height:220,correctLevel:QRCode.CorrectLevel.M});
+ $('qrTxt').textContent='Scan to open the exam page for '+(DAY?DAY.date:'this date')+'. Print or display this QR.';
+ $('dlQr').classList.remove('hid');
+}
+$('url').oninput=qr;
+$('dlQr').onclick=()=>{
+ const c=$('qr').querySelector('canvas');if(!c)return;
+ c.toBlob(b=>save('qr-'+(DAY?DAY.date:'day')+'.png',b));
+};
+</script>
+</body>
+</html>
